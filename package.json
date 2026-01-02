@@ -4,12 +4,13 @@
   "description": "QR Code Event Management System",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm run preview",
+    "install-frontend": "cd frontend && npm install",
     "server": "cd backend && npm run dev",
     "client": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
-    "start": "cd backend && npm start",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "install-all": "npm install && cd backend && npm install && cd frontend && npm install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
