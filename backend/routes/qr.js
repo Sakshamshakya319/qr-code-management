@@ -66,6 +66,83 @@ router.post('/generate/:userId', adminAuth, async (req, res) => {
   }
 });
 
+// Generate QR code for current user (User can generate their own)
+router.post('/generate-my-qr', auth, async (req, res) => {
+  try {
+    const { eventId = 'default-event' } = req.body;
+    
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Create unique QR data
+    const qrData = {
+      userId: user._id,
+      email: user.email,
+      name: user.name,
+      eventId,
+      generatedAt: new Date().toISOString(),
+      generatedBy: user._id, // Self-generated
+      type: 'user-generated'
+    };
+    
+    const qrDataString = JSON.stringify(qrData);
+    
+    // Generate QR code as base64 image
+    const qrCodeImage = await QRCode.toDataURL(qrDataString, {
+      errorCorrectionLevel: 'M',
+      type: 'image/png',
+      quality: 0.92,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      width: 256
+    });
+    
+    // Update user with QR code data
+    user.qrCode = qrCodeImage;
+    user.qrCodeData = qrDataString;
+    user.eventId = eventId;
+    user.qrGeneratedAt = new Date();
+    await user.save();
+    
+    res.json({
+      message: 'QR code generated successfully',
+      qrCode: qrCodeImage,
+      qrData: qrDataString,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isApproved: user.isApproved
+      }
+    });
+  } catch (error) {
+    console.error('QR generation error:', error);
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+    
+    res.json({
+      message: 'QR code generated successfully',
+      qrCode: qrCodeImage,
+      qrData: qrDataString,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isApproved: user.isApproved
+      }
+    });
+  } catch (error) {
+    console.error('QR generation error:', error);
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
 // Scan QR code and approve user (Admin only)
 router.post('/scan', adminAuth, qrScanValidation, async (req, res) => {
   try {
