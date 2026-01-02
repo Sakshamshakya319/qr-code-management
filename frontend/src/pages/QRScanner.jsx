@@ -1,160 +1,88 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play } from 'lucide-react';
-import jsQR from 'jsqr';
+import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings } from 'lucide-react';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 
 const QRScanner = () => {
-  const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [manualInput, setManualInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [cameraError, setCameraError] = useState('');
-  const [devices, setDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerError, setScannerError] = useState('');
   
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const scanIntervalRef = useRef(null);
+  const scannerRef = useRef(null);
+  const html5QrCodeRef = useRef(null);
 
   useEffect(() => {
-    getCameraDevices();
     return () => {
-      stopCamera();
+      stopScanner();
     };
   }, []);
 
-  const getCameraDevices = async () => {
+  const startScanner = async () => {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      setDevices(videoDevices);
-      
-      // Prefer back camera
-      const backCamera = videoDevices.find(device => 
-        device.label.toLowerCase().includes('back') || 
-        device.label.toLowerCase().includes('rear') ||
-        device.label.toLowerCase().includes('environment')
-      );
-      
-      if (backCamera) {
-        setSelectedDevice(backCamera.deviceId);
-      } else if (videoDevices.length > 0) {
-        setSelectedDevice(videoDevices[0].deviceId);
-      }
-    } catch (error) {
-      console.error('Error getting camera devices:', error);
-    }
-  };
+      setScannerError('');
+      setIsScanning(true);
 
-  const startCamera = async () => {
-    try {
-      setCameraError('');
-      
-      // Stop any existing stream
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-
-      // Camera constraints for better QR scanning
-      const constraints = {
-        video: {
-          facingMode: 'environment', // Prefer back camera
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          aspectRatio: { ideal: 16/9 }
+      // Configuration for the scanner
+      const config = {
+        fps: 10, // Frames per second for scanning
+        qrbox: { width: 250, height: 250 }, // QR code scanning box
+        aspectRatio: 1.0, // Square aspect ratio
+        disableFlip: false, // Allow flipping for better detection
+        videoConstraints: {
+          facingMode: "environment" // Use back camera
         }
       };
 
-      // If specific device selected, use it
-      if (selectedDevice) {
-        constraints.video.deviceId = { exact: selectedDevice };
-        delete constraints.video.facingMode; // Remove facingMode when using deviceId
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
+      // Success callback when QR code is detected
+      const onScanSuccess = (decodedText, decodedResult) => {
+        console.log('QR Code detected:', decodedText);
         
-        // Wait for video to load
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
-          setScanning(true);
-          startQRDetection();
-        };
-      }
+        // Stop the scanner
+        stopScanner();
+        
+        // Process the QR code
+        processQRCode(decodedText);
+        
+        toast.success('QR Code detected successfully!');
+      };
+
+      // Error callback (optional, for debugging)
+      const onScanFailure = (error) => {
+        // This is called frequently when no QR code is detected
+        // We don't need to show these errors to the user
+        console.debug('QR scan attempt:', error);
+      };
+
+      // Create and start the scanner
+      html5QrCodeRef.current = new Html5QrcodeScanner(
+        "qr-reader", // Element ID
+        config,
+        false // Verbose logging
+      );
+
+      html5QrCodeRef.current.render(onScanSuccess, onScanFailure);
+
     } catch (error) {
-      console.error('Camera access error:', error);
-      let errorMessage = 'Unable to access camera. ';
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage += 'Please allow camera permissions and try again.';
-      } else if (error.name === 'NotFoundError') {
-        errorMessage += 'No camera found on this device.';
-      } else if (error.name === 'NotReadableError') {
-        errorMessage += 'Camera is being used by another application.';
-      } else {
-        errorMessage += 'Please check camera permissions and try again.';
-      }
-      
-      setCameraError(errorMessage);
-      toast.error(errorMessage);
+      console.error('Scanner start error:', error);
+      setScannerError(`Failed to start scanner: ${error.message}`);
+      setIsScanning(false);
+      toast.error('Failed to start camera scanner');
     }
   };
 
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-    
-    setScanning(false);
-    setCameraError('');
-  };
-
-  const startQRDetection = () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-    }
-
-    scanIntervalRef.current = setInterval(() => {
-      scanForQR();
-    }, 500); // Scan every 500ms
-  };
-
-  const scanForQR = () => {
-    if (!videoRef.current || !canvasRef.current || !scanning) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-      if (code) {
-        // QR code detected!
-        console.log('QR Code detected:', code.data);
-        stopCamera();
-        processQRCode(code.data);
-        
-        // Visual feedback
-        toast.success('QR Code detected!');
+  const stopScanner = () => {
+    if (html5QrCodeRef.current) {
+      try {
+        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
+      } catch (error) {
+        console.error('Error stopping scanner:', error);
       }
     }
+    setIsScanning(false);
   };
 
   const processQRCode = async (qrData, scanType = 'approval') => {
@@ -168,12 +96,13 @@ const QRScanner = () => {
       const response = await api.post('/qr/scan', {
         qrData: qrData.trim(),
         scanType,
-        notes: 'Scanned via camera'
+        notes: 'Scanned via HTML5 QR Scanner'
       });
 
       setScanResult(response.data);
       toast.success(response.data.message);
       setManualInput('');
+      
     } catch (error) {
       const message = error.response?.data?.error || 'Failed to process QR code';
       toast.error(message);
@@ -192,32 +121,22 @@ const QRScanner = () => {
     processQRCode(manualInput);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          context.drawImage(img, 0, 0);
-          
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          
-          if (code) {
-            processQRCode(code.data);
-            toast.success('QR Code found in image!');
-          } else {
-            toast.error('No QR code found in the image');
-          }
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    try {
+      const html5QrCode = new Html5Qrcode("file-upload-scanner");
+      
+      const qrCodeMessage = await html5QrCode.scanFile(file, true);
+      console.log('QR Code from file:', qrCodeMessage);
+      
+      processQRCode(qrCodeMessage);
+      toast.success('QR Code found in image!');
+      
+    } catch (error) {
+      console.error('File scan error:', error);
+      toast.error('No QR code found in the uploaded image');
     }
   };
 
@@ -236,126 +155,56 @@ const QRScanner = () => {
             Camera Scanner
           </h3>
           
-          {/* Camera Device Selection */}
-          {devices.length > 1 && (
-            <div className="form-group">
-              <label className="form-label">Select Camera</label>
-              <select 
-                className="form-input"
-                value={selectedDevice}
-                onChange={(e) => setSelectedDevice(e.target.value)}
-                disabled={scanning}
-              >
-                {devices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          <div className="qr-scanner">
-            {scanning ? (
-              <div>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{
-                      width: '100%',
-                      maxWidth: '400px',
-                      height: 'auto',
-                      border: '2px solid #007bff',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  {/* Scanning overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '200px',
-                    height: '200px',
-                    border: '2px solid #00ff00',
-                    borderRadius: '8px',
-                    pointerEvents: 'none'
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '-2px',
-                      left: '-2px',
-                      width: '20px',
-                      height: '20px',
-                      borderTop: '4px solid #00ff00',
-                      borderLeft: '4px solid #00ff00'
-                    }}></div>
-                    <div style={{
-                      position: 'absolute',
-                      top: '-2px',
-                      right: '-2px',
-                      width: '20px',
-                      height: '20px',
-                      borderTop: '4px solid #00ff00',
-                      borderRight: '4px solid #00ff00'
-                    }}></div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '-2px',
-                      left: '-2px',
-                      width: '20px',
-                      height: '20px',
-                      borderBottom: '4px solid #00ff00',
-                      borderLeft: '4px solid #00ff00'
-                    }}></div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '-2px',
-                      right: '-2px',
-                      width: '20px',
-                      height: '20px',
-                      borderBottom: '4px solid #00ff00',
-                      borderRight: '4px solid #00ff00'
-                    }}></div>
-                  </div>
-                </div>
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                <div className="mt-3 text-center">
-                  <p className="text-success mb-2">📱 Point camera at QR code</p>
-                  <button onClick={stopCamera} className="btn btn-danger">
-                    <StopCircle size={16} />
-                    Stop Camera
+          {!isScanning ? (
+            <div className="text-center">
+              <Camera size={64} className="text-muted mb-3" />
+              {scannerError ? (
+                <div className="mb-3">
+                  <p className="text-danger mb-2" style={{ fontSize: '14px' }}>
+                    {scannerError}
+                  </p>
+                  <button onClick={startScanner} className="btn btn-primary">
+                    <Camera size={16} />
+                    Try Again
                   </button>
                 </div>
+              ) : (
+                <div>
+                  <p className="text-muted mb-3">
+                    Click to start camera scanning
+                  </p>
+                  <button onClick={startScanner} className="btn btn-primary">
+                    <Play size={16} />
+                    Start Camera Scanner
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="mb-3 text-center">
+                <p className="text-success mb-2">
+                  📱 Point your camera at the QR code
+                </p>
+                <button onClick={stopScanner} className="btn btn-danger">
+                  <StopCircle size={16} />
+                  Stop Scanner
+                </button>
               </div>
-            ) : (
-              <div className="text-center">
-                <Camera size={64} className="text-muted mb-3" />
-                {cameraError ? (
-                  <div className="mb-3">
-                    <p className="text-danger mb-2">{cameraError}</p>
-                    <button onClick={startCamera} className="btn btn-primary">
-                      <Camera size={16} />
-                      Try Again
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-muted mb-3">Click to start camera scanning</p>
-                    <button onClick={startCamera} className="btn btn-primary">
-                      <Play size={16} />
-                      Start Camera
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              
+              {/* QR Scanner Container */}
+              <div 
+                id="qr-reader" 
+                style={{ 
+                  width: '100%',
+                  maxWidth: '400px',
+                  margin: '0 auto'
+                }}
+              ></div>
+            </div>
+          )}
 
-          {/* File Upload */}
+          {/* File Upload Scanner */}
           <div className="mt-4">
             <h4 className="mb-2">
               <Upload size={16} style={{ marginRight: '8px' }} />
@@ -367,7 +216,29 @@ const QRScanner = () => {
               onChange={handleFileUpload}
               className="form-input"
             />
-            <small className="text-muted">Upload an image containing a QR code</small>
+            <small className="text-muted">
+              Upload an image containing a QR code to scan it
+            </small>
+            
+            {/* Hidden element for file scanning */}
+            <div id="file-upload-scanner" style={{ display: 'none' }}></div>
+          </div>
+
+          {/* Camera Tips */}
+          <div className="mt-4">
+            <h4 className="mb-2">
+              <Settings size={16} style={{ marginRight: '8px' }} />
+              Scanning Tips
+            </h4>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              <ul style={{ marginLeft: '16px' }}>
+                <li>Hold your device steady</li>
+                <li>Ensure good lighting</li>
+                <li>Keep QR code within the scanning box</li>
+                <li>Allow camera permissions when prompted</li>
+                <li>Use back camera for better results</li>
+              </ul>
+            </div>
           </div>
         </div>
 
@@ -393,6 +264,17 @@ const QRScanner = () => {
               {loading ? 'Processing...' : 'Process QR Code'}
             </button>
           </form>
+
+          {/* Quick Test */}
+          <div className="mt-4">
+            <h4 className="mb-2">Quick Test</h4>
+            <p className="text-muted mb-2" style={{ fontSize: '12px' }}>
+              Need a QR code to test? Visit the QR Test page to generate one.
+            </p>
+            <a href="/qr-test" className="btn btn-secondary">
+              Generate Test QR Code
+            </a>
+          </div>
         </div>
       </div>
 
@@ -476,9 +358,14 @@ const QRScanner = () => {
                   Clear Result
                 </button>
                 <button 
-                  onClick={startCamera}
+                  onClick={() => {
+                    setScanResult(null);
+                    if (!isScanning) {
+                      startScanner();
+                    }
+                  }}
                   className="btn btn-primary ml-2"
-                  disabled={scanning}
+                  disabled={isScanning}
                 >
                   Scan Another
                 </button>
