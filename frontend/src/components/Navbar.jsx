@@ -53,6 +53,13 @@ const Navbar = () => {
                   <Users size={16} />
                   Users
                 </Link>
+                <Link 
+                  to="/qr-test" 
+                  className={`nav-link ${isActive('/qr-test') ? 'active' : ''}`}
+                >
+                  <QrCode size={16} />
+                  QR Test
+                </Link>
               </>
             )}
             

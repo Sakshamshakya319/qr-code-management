@@ -10,6 +10,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import UserProfile from './pages/UserProfile';
 import QRScanner from './pages/QRScanner';
 import UserManagement from './pages/UserManagement';
+import QRTest from './pages/QRTest';
 import LoadingSpinner from './components/LoadingSpinner';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
@@ -103,6 +104,14 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute adminOnly>
                 <UserManagement />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/qr-test" 
+            element={
+              <ProtectedRoute adminOnly>
+                <QRTest />
               </ProtectedRoute>
             } 
           />
