@@ -17,8 +17,19 @@ const QRScanner = () => {
   useEffect(() => {
     checkCameraPermission();
     
-    // Create Html5Qrcode instance ONCE
-    html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+    // Wait for DOM to be ready, then create Html5Qrcode instance ONCE
+    const initializeScanner = () => {
+      const element = document.getElementById('qr-reader');
+      if (element) {
+        html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+        console.log('Html5Qrcode instance created successfully');
+      } else {
+        // Retry if element not found
+        setTimeout(initializeScanner, 100);
+      }
+    };
+    
+    initializeScanner();
     
     // Cleanup on unmount
     return () => {
@@ -60,6 +71,12 @@ const QRScanner = () => {
   const startScanner = async () => {
     try {
       setScannerError('');
+      
+      // Ensure Html5Qrcode instance exists
+      if (!html5QrCodeRef.current) {
+        throw new Error('Scanner not initialized');
+      }
+
       setIsScanning(true);
 
       // Success callback
@@ -236,60 +253,61 @@ const QRScanner = () => {
             </div>
           )}
           
-          {cameraPermission === 'granted' ? (
-            <div>
-              <div className="mb-3 text-center">
-                {!isScanning ? (
-                  <div>
-                    <Camera size={64} className="text-muted mb-3" />
-                    {scannerError ? (
-                      <div className="mb-3">
-                        <p className="text-danger mb-2" style={{ fontSize: '14px' }}>
-                          {scannerError}
-                        </p>
-                        <button onClick={startScanner} className="btn btn-primary">
-                          <Camera size={16} />
-                          Try Again
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-muted mb-3">
-                          Ready to scan QR codes
-                        </p>
-                        <button onClick={startScanner} className="btn btn-primary">
-                          <Play size={16} />
-                          Start Camera Scanner
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-success mb-2">
-                      📱 Point your camera at the QR code
-                    </p>
-                    <button onClick={stopScanner} className="btn btn-danger">
-                      <StopCircle size={16} />
-                      Stop Scanner
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* QR Scanner Container - ALWAYS rendered, visibility controlled by CSS */}
-              <div 
-                id="qr-reader" 
-                style={{ 
-                  width: '100%',
-                  maxWidth: '400px',
-                  margin: '0 auto',
-                  minHeight: '300px',
-                  display: isScanning ? 'block' : 'none'
-                }}
-              ></div>
+          {/* Scanner Controls */}
+          {cameraPermission === 'granted' && (
+            <div className="mb-3 text-center">
+              {!isScanning ? (
+                <div>
+                  <Camera size={64} className="text-muted mb-3" />
+                  {scannerError ? (
+                    <div className="mb-3">
+                      <p className="text-danger mb-2" style={{ fontSize: '14px' }}>
+                        {scannerError}
+                      </p>
+                      <button onClick={startScanner} className="btn btn-primary">
+                        <Camera size={16} />
+                        Try Again
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-muted mb-3">
+                        Ready to scan QR codes
+                      </p>
+                      <button onClick={startScanner} className="btn btn-primary">
+                        <Play size={16} />
+                        Start Camera Scanner
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-success mb-2">
+                    📱 Point your camera at the QR code
+                  </p>
+                  <button onClick={stopScanner} className="btn btn-danger">
+                    <StopCircle size={16} />
+                    Stop Scanner
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
+          )}
+
+          {/* QR Scanner Container - ALWAYS RENDERED */}
+          <div 
+            id="qr-reader" 
+            style={{ 
+              width: '100%',
+              maxWidth: '400px',
+              margin: '0 auto',
+              minHeight: '300px',
+              display: isScanning ? 'block' : 'none'
+            }}
+          ></div>
+
+          {cameraPermission !== 'granted' && (
             <div className="text-center">
               <AlertCircle size={64} className="text-muted mb-3" />
               <p className="text-muted">Camera not available</p>
