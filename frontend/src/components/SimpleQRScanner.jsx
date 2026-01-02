@@ -5,7 +5,7 @@ const SimpleQRScanner = ({ onScanSuccess, onError }) => {
   const html5QrCodeRef = useRef(null);
 
   useEffect(() => {
-    // Create scanner instance
+    // Create scanner instance ONCE
     html5QrCodeRef.current = new Html5Qrcode("simple-qr-reader");
 
     const startScanner = async () => {
@@ -47,9 +47,12 @@ const SimpleQRScanner = ({ onScanSuccess, onError }) => {
 
   return (
     <div>
+      {/* Always render the div, never conditionally */}
       <div id="simple-qr-reader" style={{ width: "300px", margin: "0 auto" }} />
     </div>
   );
 };
+
+export default SimpleQRScanner;
 
 export default SimpleQRScanner;

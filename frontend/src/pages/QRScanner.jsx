@@ -13,14 +13,21 @@ const QRScanner = () => {
   const [cameraPermission, setCameraPermission] = useState('unknown');
   
   const html5QrCodeRef = useRef(null);
-  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     checkCameraPermission();
     
+    // Create Html5Qrcode instance ONCE
+    html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+    
     // Cleanup on unmount
     return () => {
-      stopScanner();
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(() => {
+          console.log('Scanner was not running');
+        });
+        html5QrCodeRef.current.clear();
+      }
     };
   }, []);
 
@@ -55,32 +62,6 @@ const QRScanner = () => {
       setScannerError('');
       setIsScanning(true);
 
-      // Stop any existing scanner first
-      await stopScanner();
-
-      // Wait for DOM to be ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Check if qr-reader element exists
-      const qrReaderElement = document.getElementById('qr-reader');
-      if (!qrReaderElement) {
-        throw new Error('QR reader element not found');
-      }
-
-      // Create Html5Qrcode instance (not Html5QrcodeScanner)
-      html5QrCodeRef.current = new Html5Qrcode("qr-reader");
-      isInitializedRef.current = true;
-
-      // Camera configuration
-      const cameraConfig = { facingMode: "environment" }; // Back camera
-      
-      // Scanner configuration
-      const scannerConfig = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      };
-
       // Success callback
       const onScanSuccess = (decodedText) => {
         console.log('QR Code detected:', decodedText);
@@ -100,10 +81,13 @@ const QRScanner = () => {
         console.debug('QR scan attempt:', error);
       };
 
-      // Start the scanner
+      // Start the camera (Html5Qrcode instance already created in useEffect)
       await html5QrCodeRef.current.start(
-        cameraConfig,
-        scannerConfig,
+        { facingMode: "environment" }, // Back camera
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
         onScanSuccess,
         onScanFailure
       );
@@ -114,29 +98,20 @@ const QRScanner = () => {
       console.error('Scanner start error:', error);
       setScannerError(`Failed to start scanner: ${error.message || 'Unknown error'}`);
       setIsScanning(false);
-      isInitializedRef.current = false;
       toast.error('Failed to start camera scanner');
     }
   };
 
   const stopScanner = async () => {
     try {
-      if (html5QrCodeRef.current && isInitializedRef.current) {
+      if (html5QrCodeRef.current && isScanning) {
         console.log('Stopping scanner...');
-        
-        // Stop the scanner
         await html5QrCodeRef.current.stop();
-        
-        // Clear the scanner
-        html5QrCodeRef.current.clear();
-        
         console.log('Scanner stopped successfully');
       }
     } catch (error) {
       console.error('Error stopping scanner:', error);
     } finally {
-      html5QrCodeRef.current = null;
-      isInitializedRef.current = false;
       setIsScanning(false);
     }
   };
@@ -261,51 +236,56 @@ const QRScanner = () => {
             </div>
           )}
           
-          {cameraPermission === 'granted' && !isScanning ? (
-            <div className="text-center">
-              <Camera size={64} className="text-muted mb-3" />
-              {scannerError ? (
-                <div className="mb-3">
-                  <p className="text-danger mb-2" style={{ fontSize: '14px' }}>
-                    {scannerError}
-                  </p>
-                  <button onClick={startScanner} className="btn btn-primary">
-                    <Camera size={16} />
-                    Try Again
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-muted mb-3">
-                    Ready to scan QR codes
-                  </p>
-                  <button onClick={startScanner} className="btn btn-primary">
-                    <Play size={16} />
-                    Start Camera Scanner
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : cameraPermission === 'granted' && isScanning ? (
+          {cameraPermission === 'granted' ? (
             <div>
               <div className="mb-3 text-center">
-                <p className="text-success mb-2">
-                  📱 Point your camera at the QR code
-                </p>
-                <button onClick={stopScanner} className="btn btn-danger">
-                  <StopCircle size={16} />
-                  Stop Scanner
-                </button>
+                {!isScanning ? (
+                  <div>
+                    <Camera size={64} className="text-muted mb-3" />
+                    {scannerError ? (
+                      <div className="mb-3">
+                        <p className="text-danger mb-2" style={{ fontSize: '14px' }}>
+                          {scannerError}
+                        </p>
+                        <button onClick={startScanner} className="btn btn-primary">
+                          <Camera size={16} />
+                          Try Again
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-muted mb-3">
+                          Ready to scan QR codes
+                        </p>
+                        <button onClick={startScanner} className="btn btn-primary">
+                          <Play size={16} />
+                          Start Camera Scanner
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-success mb-2">
+                      📱 Point your camera at the QR code
+                    </p>
+                    <button onClick={stopScanner} className="btn btn-danger">
+                      <StopCircle size={16} />
+                      Stop Scanner
+                    </button>
+                  </div>
+                )}
               </div>
               
-              {/* QR Scanner Container - MUST exist before initialization */}
+              {/* QR Scanner Container - ALWAYS rendered, visibility controlled by CSS */}
               <div 
                 id="qr-reader" 
                 style={{ 
                   width: '100%',
                   maxWidth: '400px',
                   margin: '0 auto',
-                  minHeight: '300px'
+                  minHeight: '300px',
+                  display: isScanning ? 'block' : 'none'
                 }}
               ></div>
             </div>
@@ -364,7 +344,7 @@ const QRScanner = () => {
                 <strong>Debug Info:</strong>
                 <div>Camera Permission: {cameraPermission}</div>
                 <div>Scanner Active: {isScanning ? 'Yes' : 'No'}</div>
-                <div>Scanner Initialized: {isInitializedRef.current ? 'Yes' : 'No'}</div>
+                <div>Scanner Instance: {html5QrCodeRef.current ? 'Created' : 'Not Created'}</div>
                 <div>QR Reader Element: {document.getElementById('qr-reader') ? 'Found' : 'Missing'}</div>
                 <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 
                               navigator.userAgent.includes('Firefox') ? 'Firefox' : 
