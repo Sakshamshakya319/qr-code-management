@@ -149,15 +149,7 @@ const Dashboard = () => {
               <div className="text-center mb-3">
                 <img 
                   src={qrCode} 
-                  alt="Your QR Code" 
-                  style={{ 
-                    maxWidth: '256px', 
-                    width: '100%', 
-                    border: '1px solid #ddd', 
-                    borderRadius: '8px',
-                    padding: '10px',
-                    backgroundColor: '#fff'
-                  }}
+                  alt="Your QR Code"
                 />
               </div>
               
@@ -166,7 +158,7 @@ const Dashboard = () => {
                   Show this QR code to admin for approval or event entry
                 </p>
                 
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <div className="qr-actions">
                   <button 
                     onClick={downloadQR}
                     className="btn btn-secondary"
@@ -184,13 +176,20 @@ const Dashboard = () => {
                     {generatingQR ? 'Regenerating...' : 'Regenerate QR Code'}
                   </button>
                 </div>
+                
+                <div className="qr-info-box">
+                  <small>
+                    💡 Tip: Download your QR code to save it on your device for offline access
+                  </small>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="text-center">
-              <QrCode size={64} className="text-muted mb-3" />
+            <div className="qr-generation-section">
+              <QrCode size={64} className="icon" />
+              <h4 className="mb-2">Generate Your QR Code</h4>
               <p className="text-muted mb-3">
-                Generate your personal QR code for event registration and entry
+                Create your personal QR code for event registration and entry
               </p>
               
               <button 
@@ -202,9 +201,9 @@ const Dashboard = () => {
                 {generatingQR ? 'Generating...' : 'Generate My QR Code'}
               </button>
               
-              <div className="mt-3">
-                <small className="text-muted">
-                  Your QR code will contain your registration information for quick scanning
+              <div className="qr-info-box">
+                <small>
+                  Your QR code will contain your registration information for quick scanning by event staff
                 </small>
               </div>
             </div>
