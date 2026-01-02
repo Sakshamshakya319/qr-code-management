@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings } from 'lucide-react';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings, AlertCircle } from 'lucide-react';
+import { Html5QrcodeScanner, Html5Qrcode, Html5QrcodeScanType } from 'html5-qrcode';
 
 const QRScanner = () => {
   const [scanResult, setScanResult] = useState(null);
@@ -10,64 +10,102 @@ const QRScanner = () => {
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scannerError, setScannerError] = useState('');
+  const [cameraPermission, setCameraPermission] = useState('unknown');
   
   const scannerRef = useRef(null);
   const html5QrCodeRef = useRef(null);
 
   useEffect(() => {
+    checkCameraPermission();
     return () => {
       stopScanner();
     };
   }, []);
+
+  const checkCameraPermission = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraPermission('not-supported');
+        setScannerError('Camera not supported on this device/browser');
+        return;
+      }
+
+      // Check if we can access camera
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop());
+      setCameraPermission('granted');
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        setCameraPermission('denied');
+        setScannerError('Camera permission denied. Please allow camera access.');
+      } else if (error.name === 'NotFoundError') {
+        setCameraPermission('no-camera');
+        setScannerError('No camera found on this device.');
+      } else {
+        setCameraPermission('error');
+        setScannerError(`Camera error: ${error.message}`);
+      }
+    }
+  };
 
   const startScanner = async () => {
     try {
       setScannerError('');
       setIsScanning(true);
 
+      // Stop any existing scanner
+      if (html5QrCodeRef.current) {
+        try {
+          await html5QrCodeRef.current.clear();
+        } catch (e) {
+          console.log('No existing scanner to clear');
+        }
+      }
+
       // Configuration for the scanner
       const config = {
-        fps: 10, // Frames per second for scanning
-        qrbox: { width: 250, height: 250 }, // QR code scanning box
-        aspectRatio: 1.0, // Square aspect ratio
-        disableFlip: false, // Allow flipping for better detection
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false,
         videoConstraints: {
-          facingMode: "environment" // Use back camera
-        }
+          facingMode: "environment"
+        },
+        rememberLastUsedCamera: true
       };
 
-      // Success callback when QR code is detected
+      // Success callback
       const onScanSuccess = (decodedText, decodedResult) => {
         console.log('QR Code detected:', decodedText);
         
-        // Stop the scanner
+        // Stop the scanner immediately
         stopScanner();
         
         // Process the QR code
         processQRCode(decodedText);
         
-        toast.success('QR Code detected successfully!');
+        toast.success('QR Code detected!');
       };
 
-      // Error callback (optional, for debugging)
+      // Error callback (for debugging only)
       const onScanFailure = (error) => {
-        // This is called frequently when no QR code is detected
-        // We don't need to show these errors to the user
+        // Don't show these errors as they happen frequently during scanning
         console.debug('QR scan attempt:', error);
       };
 
-      // Create and start the scanner
+      // Create scanner
       html5QrCodeRef.current = new Html5QrcodeScanner(
-        "qr-reader", // Element ID
+        "qr-reader",
         config,
-        false // Verbose logging
+        false
       );
 
+      // Render the scanner
       html5QrCodeRef.current.render(onScanSuccess, onScanFailure);
 
     } catch (error) {
       console.error('Scanner start error:', error);
-      setScannerError(`Failed to start scanner: ${error.message}`);
+      setScannerError(`Failed to start scanner: ${error.message || 'Unknown error'}`);
       setIsScanning(false);
       toast.error('Failed to start camera scanner');
     }
@@ -76,7 +114,11 @@ const QRScanner = () => {
   const stopScanner = () => {
     if (html5QrCodeRef.current) {
       try {
-        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current.clear().then(() => {
+          console.log('Scanner cleared successfully');
+        }).catch(err => {
+          console.log('Scanner clear error:', err);
+        });
         html5QrCodeRef.current = null;
       } catch (error) {
         console.error('Error stopping scanner:', error);
@@ -86,8 +128,8 @@ const QRScanner = () => {
   };
 
   const processQRCode = async (qrData, scanType = 'approval') => {
-    if (!qrData.trim()) {
-      toast.error('Please provide QR code data');
+    if (!qrData || !qrData.trim()) {
+      toast.error('Invalid QR code data');
       return;
     }
 
@@ -104,6 +146,7 @@ const QRScanner = () => {
       setManualInput('');
       
     } catch (error) {
+      console.error('QR processing error:', error);
       const message = error.response?.data?.error || 'Failed to process QR code';
       toast.error(message);
       setScanResult({
@@ -118,7 +161,9 @@ const QRScanner = () => {
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
-    processQRCode(manualInput);
+    if (manualInput.trim()) {
+      processQRCode(manualInput);
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -140,6 +185,20 @@ const QRScanner = () => {
     }
   };
 
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop());
+      setCameraPermission('granted');
+      setScannerError('');
+      toast.success('Camera permission granted!');
+    } catch (error) {
+      setCameraPermission('denied');
+      setScannerError('Camera permission denied. Please allow camera access in your browser settings.');
+      toast.error('Camera permission denied');
+    }
+  };
+
   return (
     <div className="container">
       <div className="mb-4">
@@ -155,7 +214,30 @@ const QRScanner = () => {
             Camera Scanner
           </h3>
           
-          {!isScanning ? (
+          {/* Camera Permission Status */}
+          {cameraPermission !== 'granted' && (
+            <div className="mb-3 p-3" style={{ 
+              backgroundColor: cameraPermission === 'denied' ? '#fff3cd' : '#f8d7da', 
+              borderRadius: '6px' 
+            }}>
+              <div className="mb-2">
+                <AlertCircle size={16} className="text-warning" style={{ marginRight: '8px' }} />
+                <strong>Camera Status:</strong> {
+                  cameraPermission === 'denied' ? 'Permission Denied' :
+                  cameraPermission === 'no-camera' ? 'No Camera Found' :
+                  cameraPermission === 'not-supported' ? 'Not Supported' :
+                  'Checking...'
+                }
+              </div>
+              {cameraPermission === 'denied' && (
+                <button onClick={requestCameraPermission} className="btn btn-warning">
+                  Request Camera Permission
+                </button>
+              )}
+            </div>
+          )}
+          
+          {cameraPermission === 'granted' && !isScanning ? (
             <div className="text-center">
               <Camera size={64} className="text-muted mb-3" />
               {scannerError ? (
@@ -171,7 +253,7 @@ const QRScanner = () => {
               ) : (
                 <div>
                   <p className="text-muted mb-3">
-                    Click to start camera scanning
+                    Ready to scan QR codes
                   </p>
                   <button onClick={startScanner} className="btn btn-primary">
                     <Play size={16} />
@@ -180,7 +262,7 @@ const QRScanner = () => {
                 </div>
               )}
             </div>
-          ) : (
+          ) : cameraPermission === 'granted' && isScanning ? (
             <div>
               <div className="mb-3 text-center">
                 <p className="text-success mb-2">
@@ -201,6 +283,11 @@ const QRScanner = () => {
                   margin: '0 auto'
                 }}
               ></div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <AlertCircle size={64} className="text-muted mb-3" />
+              <p className="text-muted">Camera not available</p>
             </div>
           )}
 
@@ -224,19 +311,20 @@ const QRScanner = () => {
             <div id="file-upload-scanner" style={{ display: 'none' }}></div>
           </div>
 
-          {/* Camera Tips */}
+          {/* Browser Compatibility */}
           <div className="mt-4">
             <h4 className="mb-2">
               <Settings size={16} style={{ marginRight: '8px' }} />
-              Scanning Tips
+              Browser Requirements
             </h4>
             <div style={{ fontSize: '12px', color: '#666' }}>
+              <p><strong>For best results:</strong></p>
               <ul style={{ marginLeft: '16px' }}>
-                <li>Hold your device steady</li>
-                <li>Ensure good lighting</li>
-                <li>Keep QR code within the scanning box</li>
+                <li>Use Chrome, Firefox, or Safari</li>
+                <li>Ensure HTTPS connection (required for camera)</li>
                 <li>Allow camera permissions when prompted</li>
-                <li>Use back camera for better results</li>
+                <li>Close other apps using the camera</li>
+                <li>Ensure good lighting conditions</li>
               </ul>
             </div>
           </div>
@@ -269,11 +357,41 @@ const QRScanner = () => {
           <div className="mt-4">
             <h4 className="mb-2">Quick Test</h4>
             <p className="text-muted mb-2" style={{ fontSize: '12px' }}>
-              Need a QR code to test? Visit the QR Test page to generate one.
+              Need a QR code to test? Generate one below:
             </p>
-            <a href="/qr-test" className="btn btn-secondary">
-              Generate Test QR Code
-            </a>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => {
+                  const testData = JSON.stringify({
+                    userId: "test-user-123",
+                    email: "test@example.com",
+                    name: "Test User",
+                    eventId: "test-event",
+                    generatedAt: new Date().toISOString()
+                  });
+                  setManualInput(testData);
+                }}
+                className="btn btn-secondary"
+              >
+                Load Test QR Data
+              </button>
+              <a href="/qr-test" className="btn btn-secondary">
+                QR Test Page
+              </a>
+            </div>
+            
+            {/* Simple QR Code for Testing */}
+            <div className="mt-3 p-3" style={{ backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+              <p className="mb-2" style={{ fontSize: '12px' }}><strong>Test QR Code:</strong></p>
+              <img 
+                src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Hello%20World%20QR%20Test" 
+                alt="Test QR Code"
+                style={{ border: '1px solid #ddd', borderRadius: '4px' }}
+              />
+              <p className="mt-2" style={{ fontSize: '10px', color: '#666' }}>
+                Scan this test QR code to verify scanner functionality
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -360,12 +478,12 @@ const QRScanner = () => {
                 <button 
                   onClick={() => {
                     setScanResult(null);
-                    if (!isScanning) {
+                    if (!isScanning && cameraPermission === 'granted') {
                       startScanner();
                     }
                   }}
                   className="btn btn-primary ml-2"
-                  disabled={isScanning}
+                  disabled={isScanning || cameraPermission !== 'granted'}
                 >
                   Scan Another
                 </button>
