@@ -91,9 +91,9 @@ This guide will help you deploy the QR Event Management System to Vercel (fronte
    - Import from GitHub
    - Select your repository
 
-3. **Configure build settings**:
+3. **Configure build settings** (IMPORTANT):
+   - **Root Directory**: `frontend` (This is crucial!)
    - **Framework Preset**: Vite
-   - **Root Directory**: `frontend`
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
    - **Install Command**: `npm install`
