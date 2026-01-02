@@ -65,20 +65,32 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// MongoDB connection with retry logic
+// MongoDB connection with retry logic and timeout
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000, // 10 second timeout
+      socketTimeoutMS: 45000, // 45 second socket timeout
+      maxPoolSize: 10, // Maintain up to 10 socket connections
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      bufferCommands: false, // Disable mongoose buffering
     });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
-    setTimeout(connectDB, 5000);
+    // Don't retry in production to avoid hanging
+    if (process.env.NODE_ENV === 'production') {
+      console.error('Exiting due to MongoDB connection failure in production');
+      process.exit(1);
+    } else {
+      setTimeout(connectDB, 5000);
+    }
   }
 };
 
+// Connect to database
 connectDB();
 
 // Routes
@@ -91,6 +103,17 @@ app.use('/api/setup', setupRoutes);
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
+});
+
+// Health check for deployment platforms
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    env: process.env.NODE_ENV || 'development',
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
 });
 
 // Health check
@@ -151,9 +174,27 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Health check available at: http://localhost:${PORT}/health`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+    mongoose.connection.close();
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+    mongoose.connection.close();
+  });
 });
 
 module.exports = app;
