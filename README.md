@@ -449,43 +449,258 @@ curl -X POST http://localhost:5000/api/setup/create-admin \
   }'
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-### Common Issues
+### QR Scanner Issues
 
-1. **CORS Errors**
-   - Ensure `FRONTEND_URL` is set correctly in backend environment
-   - Check that frontend is making requests to correct API URL
+**Camera Permission Granted but No Video Stream:**
+```bash
+# Check browser console for errors
+# Verify HTTPS connection (required for camera)
+# Close other applications using camera
+# Try the simple scanner test page (/simple-scanner)
+```
 
-2. **Database Connection**
-   - Verify MongoDB URI is correct
-   - Ensure database is accessible from your deployment platform
+**Scanner Initialization Errors:**
+```bash
+# Verify html5-qrcode library installation
+cd frontend && npm list html5-qrcode
 
-3. **Environment Variables**
-   - Double-check all environment variables are set
-   - Ensure no trailing spaces or quotes in values
+# Check DOM element exists
+# Ensure proper component lifecycle
+# Review browser compatibility
+```
 
-4. **Build Errors**
-   - Clear node_modules and reinstall: `rm -rf node_modules && npm install`
-   - Check Node.js version compatibility
+**QR Code Detection Problems:**
+```bash
+# Ensure good lighting conditions
+# Hold QR code steady and at proper distance
+# Verify QR code contains valid JSON data
+# Test with generated QR codes from /qr-test
+```
 
-### Deployment Checklist
+### Common Development Issues
 
-- [ ] MongoDB database is accessible
-- [ ] All environment variables are set
+**CORS Errors:**
+```bash
+# Backend: Check FRONTEND_URL in .env
+FRONTEND_URL=http://localhost:5173
+
+# Frontend: Check API URL in .env.local  
+VITE_API_URL=http://localhost:5000/api
+
+# Verify both servers are running
+npm run dev  # from root directory
+```
+
+**Database Connection Issues:**
+```bash
+# Local MongoDB
+MONGODB_URI=mongodb://localhost:27017/qr-event-management
+
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/qr-event-management
+
+# Check database accessibility
+# Verify credentials and network access
+```
+
+**Environment Variable Problems:**
+```bash
+# Check file names and locations
+backend/.env          # Backend environment
+frontend/.env.local   # Frontend environment
+
+# Verify no trailing spaces or quotes
+# Restart servers after changes
+# Check environment loading in code
+```
+
+**Build and Deployment Errors:**
+```bash
+# Clear dependencies and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Check Node.js version compatibility
+node --version  # Should be v18+
+
+# Verify build commands
+npm run build   # from frontend directory
+```
+
+### Production Deployment Issues
+
+**Vercel Deployment:**
+```bash
+# Check build settings in Vercel dashboard
+Root Directory: frontend
+Build Command: npm run build
+Output Directory: dist
+
+# Verify environment variables are set
+# Check build logs for specific errors
+```
+
+**Render Deployment:**
+```bash
+# Check service settings
+Build Command: cd backend && npm install
+Start Command: cd backend && npm start
+
+# Verify environment variables
+# Check service logs for errors
+```
+
+### Browser Compatibility
+
+**Supported Browsers:**
+- ✅ Chrome 60+ (Recommended for QR scanning)
+- ✅ Firefox 55+
+- ✅ Safari 11+
+- ✅ Edge 79+
+
+**Camera Requirements:**
+- ✅ HTTPS connection (required for camera access)
+- ✅ Camera permissions granted
+- ✅ No other apps using camera simultaneously
+- ✅ Modern browser with MediaDevices API support
+
+### Debug Tools
+
+**Frontend Debug Information:**
+```javascript
+// Available in QR scanner pages
+- Camera permission status
+- Scanner initialization state  
+- DOM element presence
+- Browser compatibility info
+- HTTPS connection status
+```
+
+**Backend API Testing:**
+```bash
+# Health check
+curl http://localhost:5000/api/health
+
+# Test endpoint
+curl http://localhost:5000/api/test
+
+# Admin check
+curl http://localhost:5000/api/setup/check-admin
+```
+
+### Performance Optimization
+
+**Frontend:**
+```bash
+# Build optimization
+npm run build
+
+# Bundle analysis
+npm run build -- --analyze
+
+# Image optimization for QR codes
+# Lazy loading for components
+```
+
+**Backend:**
+```bash
+# Database indexing
+# API response caching
+# Rate limiting configuration
+# Connection pooling
+```
+
+## 📋 Deployment Checklist
+
+### Pre-Deployment
+- [ ] All environment variables configured
+- [ ] Database accessible from deployment platform
 - [ ] Frontend API URL points to deployed backend
 - [ ] Backend CORS allows frontend domain
 - [ ] JWT secret is secure and consistent
-- [ ] Build commands are correct
+- [ ] Admin credentials are set
+- [ ] Build commands tested locally
 
-## Contributing
+### Post-Deployment  
+- [ ] Health check endpoint responds
+- [ ] Admin setup completes successfully
+- [ ] User registration works
+- [ ] QR code generation functions
+- [ ] Camera scanner operates correctly
+- [ ] File upload scanning works
+- [ ] Manual QR input processes
+- [ ] All API endpoints accessible
+- [ ] Database operations successful
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### Security Verification
+- [ ] No secrets in source code
+- [ ] Environment variables properly set
+- [ ] HTTPS enabled in production
+- [ ] Rate limiting active
+- [ ] CORS properly configured
+- [ ] Admin access restricted
+- [ ] Input validation working
+- [ ] Error handling secure
 
-## License
+## 🤝 Contributing
 
-This project is licensed under the MIT License.
+We welcome contributions to improve the QR Event Management System!
+
+### Development Setup
+1. **Fork** the repository
+2. **Clone** your fork locally
+3. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+4. **Install** dependencies: `npm install`
+5. **Make** your changes
+6. **Test** thoroughly (frontend + backend + QR scanner)
+7. **Commit** changes: `git commit -m 'Add amazing feature'`
+8. **Push** to branch: `git push origin feature/amazing-feature`
+9. **Submit** a Pull Request
+
+### Code Standards
+- **ESLint** configuration for code quality
+- **Prettier** for consistent formatting
+- **JSDoc** comments for functions
+- **Error handling** for all async operations
+- **Input validation** for all user inputs
+
+### Testing Guidelines
+- Test QR scanner on multiple devices/browsers
+- Verify camera functionality with HTTPS
+- Test all API endpoints with Postman/curl
+- Check responsive design on mobile devices
+- Validate environment variable handling
+
+## 📄 License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **html5-qrcode** library for robust QR scanning functionality
+- **React.js** team for the excellent frontend framework
+- **Express.js** for the lightweight backend framework
+- **MongoDB** for flexible document database
+- **Vercel** and **Render** for reliable deployment platforms
+
+## 📞 Support
+
+For support and questions:
+
+1. **Check Documentation**: Review this README and CAMERA_FIX_GUIDE.md
+2. **Search Issues**: Look through existing GitHub issues
+3. **Create Issue**: Submit detailed bug reports or feature requests
+4. **Debug Tools**: Use built-in debug panels in scanner pages
+
+## 🔗 Related Documentation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Detailed deployment instructions
+- **[CAMERA_FIX_GUIDE.md](CAMERA_FIX_GUIDE.md)** - QR scanner troubleshooting
+- **[Backend API Documentation](backend/README.md)** - API reference
+- **[Frontend Documentation](frontend/README.md)** - Component reference
+
+---
+
+**Built with ❤️ for seamless event management and QR code scanning**
