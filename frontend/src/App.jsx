@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import UserProfile from './pages/UserProfile';
 import QRScanner from './pages/QRScanner';
+import QRTest from './pages/QRTest';
+import SimpleScannerTest from './pages/SimpleScannerTest';
 import UserManagement from './pages/UserManagement';
 import LoadingSpinner from './components/LoadingSpinner';
 
@@ -140,6 +142,22 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute adminOnly>
                 <QRScanner />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/qr-test" 
+            element={
+              <ProtectedRoute adminOnly>
+                <QRTest />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/simple-scanner" 
+            element={
+              <ProtectedRoute adminOnly>
+                <SimpleScannerTest />
               </ProtectedRoute>
             } 
           />

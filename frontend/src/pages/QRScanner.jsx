@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings, AlertCircle } from 'lucide-react';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 const QRScanner = () => {
   const [scanResult, setScanResult] = useState(null);
@@ -13,10 +13,12 @@ const QRScanner = () => {
   const [cameraPermission, setCameraPermission] = useState('unknown');
   
   const html5QrCodeRef = useRef(null);
-  const scannerInstanceRef = useRef(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     checkCameraPermission();
+    
+    // Cleanup on unmount
     return () => {
       stopScanner();
     };
@@ -56,22 +58,27 @@ const QRScanner = () => {
       // Stop any existing scanner first
       await stopScanner();
 
-      // Wait a moment for cleanup
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Configuration for the scanner with better settings
-      const config = {
+      // Check if qr-reader element exists
+      const qrReaderElement = document.getElementById('qr-reader');
+      if (!qrReaderElement) {
+        throw new Error('QR reader element not found');
+      }
+
+      // Create Html5Qrcode instance (not Html5QrcodeScanner)
+      html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+      isInitializedRef.current = true;
+
+      // Camera configuration
+      const cameraConfig = { facingMode: "environment" }; // Back camera
+      
+      // Scanner configuration
+      const scannerConfig = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-        disableFlip: false,
-        videoConstraints: {
-          facingMode: { ideal: "environment" }, // Prefer back camera
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        rememberLastUsedCamera: true,
-        supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA]
+        aspectRatio: 1.0
       };
 
       // Success callback
@@ -93,15 +100,13 @@ const QRScanner = () => {
         console.debug('QR scan attempt:', error);
       };
 
-      // Create and start scanner
-      scannerInstanceRef.current = new Html5QrcodeScanner(
-        "qr-reader",
-        config,
-        false // verbose logging
+      // Start the scanner
+      await html5QrCodeRef.current.start(
+        cameraConfig,
+        scannerConfig,
+        onScanSuccess,
+        onScanFailure
       );
-
-      // Render the scanner
-      scannerInstanceRef.current.render(onScanSuccess, onScanFailure);
 
       console.log('Scanner started successfully');
 
@@ -109,21 +114,29 @@ const QRScanner = () => {
       console.error('Scanner start error:', error);
       setScannerError(`Failed to start scanner: ${error.message || 'Unknown error'}`);
       setIsScanning(false);
+      isInitializedRef.current = false;
       toast.error('Failed to start camera scanner');
     }
   };
 
   const stopScanner = async () => {
     try {
-      if (scannerInstanceRef.current) {
+      if (html5QrCodeRef.current && isInitializedRef.current) {
         console.log('Stopping scanner...');
-        await scannerInstanceRef.current.clear();
-        scannerInstanceRef.current = null;
+        
+        // Stop the scanner
+        await html5QrCodeRef.current.stop();
+        
+        // Clear the scanner
+        html5QrCodeRef.current.clear();
+        
         console.log('Scanner stopped successfully');
       }
     } catch (error) {
       console.error('Error stopping scanner:', error);
     } finally {
+      html5QrCodeRef.current = null;
+      isInitializedRef.current = false;
       setIsScanning(false);
     }
   };
@@ -285,13 +298,14 @@ const QRScanner = () => {
                 </button>
               </div>
               
-              {/* QR Scanner Container */}
+              {/* QR Scanner Container - MUST exist before initialization */}
               <div 
                 id="qr-reader" 
                 style={{ 
                   width: '100%',
                   maxWidth: '400px',
-                  margin: '0 auto'
+                  margin: '0 auto',
+                  minHeight: '300px'
                 }}
               ></div>
             </div>
@@ -347,13 +361,16 @@ const QRScanner = () => {
               </ul>
               
               <div className="mt-2 p-2" style={{ backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
-                <strong>Current Status:</strong>
+                <strong>Debug Info:</strong>
                 <div>Camera Permission: {cameraPermission}</div>
                 <div>Scanner Active: {isScanning ? 'Yes' : 'No'}</div>
+                <div>Scanner Initialized: {isInitializedRef.current ? 'Yes' : 'No'}</div>
+                <div>QR Reader Element: {document.getElementById('qr-reader') ? 'Found' : 'Missing'}</div>
                 <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 
                               navigator.userAgent.includes('Firefox') ? 'Firefox' : 
                               navigator.userAgent.includes('Safari') ? 'Safari' : 'Other'}</div>
                 <div>HTTPS: {window.location.protocol === 'https:' ? 'Yes' : 'No'}</div>
+                <div>Media Devices: {navigator.mediaDevices ? 'Supported' : 'Not Supported'}</div>
               </div>
             </div>
           </div>
@@ -406,6 +423,9 @@ const QRScanner = () => {
               </button>
               <a href="/qr-test" className="btn btn-secondary">
                 QR Test Page
+              </a>
+              <a href="/simple-scanner" className="btn btn-primary">
+                Simple Scanner Test
               </a>
             </div>
             
