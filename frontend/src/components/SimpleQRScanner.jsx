@@ -1,8 +1,10 @@
 import { Html5Qrcode } from "html5-qrcode";
 import { useEffect, useRef } from "react";
+import { playBeep } from "../utils/beepSound";
 
 const SimpleQRScanner = ({ onScanSuccess, onError }) => {
   const html5QrCodeRef = useRef(null);
+  const isScanningRef = useRef(false); // 🔒 Prevent duplicate scans
 
   useEffect(() => {
     // Create scanner instance ONCE
@@ -16,8 +18,20 @@ const SimpleQRScanner = ({ onScanSuccess, onError }) => {
             fps: 10,
             qrbox: { width: 250, height: 250 }
           },
-          (decodedText) => {
+          async (decodedText) => {
             console.log("QR Code:", decodedText);
+            
+            // 🔒 Prevent duplicate scans
+            if (isScanningRef.current) return;
+            isScanningRef.current = true;
+
+            // 🔊 Play beep sound
+            playBeep();
+            
+            // 🛑 Stop scanner after success
+            await html5QrCodeRef.current.stop();
+            
+            // Process the result
             onScanSuccess(decodedText);
           },
           (errorMessage) => {

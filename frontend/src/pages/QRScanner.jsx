@@ -3,6 +3,7 @@ import api from '../config/api';
 import toast from 'react-hot-toast';
 import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings, AlertCircle } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { playBeep } from '../utils/beepSound';
 
 const QRScanner = () => {
   const [scanResult, setScanResult] = useState(null);
@@ -13,6 +14,7 @@ const QRScanner = () => {
   const [cameraPermission, setCameraPermission] = useState('unknown');
   
   const html5QrCodeRef = useRef(null);
+  const isScanningRef = useRef(false); // 🔒 Prevent duplicate scans
 
   useEffect(() => {
     checkCameraPermission();
@@ -77,19 +79,39 @@ const QRScanner = () => {
         throw new Error('Scanner not initialized');
       }
 
+      // Reset scan lock
+      isScanningRef.current = false;
       setIsScanning(true);
 
-      // Success callback
-      const onScanSuccess = (decodedText) => {
+      // Success callback with duplicate prevention
+      const onScanSuccess = async (decodedText) => {
         console.log('QR Code detected:', decodedText);
         
-        // Stop the scanner immediately
-        stopScanner();
-        
-        // Process the QR code
-        processQRCode(decodedText);
-        
-        toast.success('QR Code detected!');
+        // 🔒 Prevent duplicate scans
+        if (isScanningRef.current) {
+          console.log('Scan already in progress, ignoring duplicate');
+          return;
+        }
+        isScanningRef.current = true;
+
+        try {
+          // 🔊 Play beep sound on successful scan
+          playBeep();
+          
+          // 🛑 Stop scanner immediately to prevent more scans
+          await html5QrCodeRef.current.stop();
+          setIsScanning(false);
+          
+          // Process the QR code
+          await processQRCode(decodedText);
+          
+          toast.success('QR Code scanned successfully!');
+          
+        } catch (error) {
+          console.error('Error processing QR code:', error);
+          toast.error('Failed to process QR code');
+          isScanningRef.current = false; // Reset lock on error
+        }
       };
 
       // Error callback (for debugging only, don't show to user)
@@ -98,7 +120,7 @@ const QRScanner = () => {
         console.debug('QR scan attempt:', error);
       };
 
-      // Start the camera (Html5Qrcode instance already created in useEffect)
+      // Start the camera
       await html5QrCodeRef.current.start(
         { facingMode: "environment" }, // Back camera
         {
@@ -115,6 +137,7 @@ const QRScanner = () => {
       console.error('Scanner start error:', error);
       setScannerError(`Failed to start scanner: ${error.message || 'Unknown error'}`);
       setIsScanning(false);
+      isScanningRef.current = false;
       toast.error('Failed to start camera scanner');
     }
   };
@@ -130,7 +153,14 @@ const QRScanner = () => {
       console.error('Error stopping scanner:', error);
     } finally {
       setIsScanning(false);
+      isScanningRef.current = false; // Reset scan lock
     }
+  };
+
+  const restartScanner = async () => {
+    setScanResult(null);
+    isScanningRef.current = false; // Reset scan lock
+    await startScanner();
   };
 
   const processQRCode = async (qrData, scanType = 'approval') => {
@@ -290,6 +320,11 @@ const QRScanner = () => {
                     <StopCircle size={16} />
                     Stop Scanner
                   </button>
+                  {isScanningRef.current && (
+                    <p className="text-info mt-2" style={{ fontSize: '12px' }}>
+                      🔒 Processing scan...
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -362,6 +397,7 @@ const QRScanner = () => {
                 <strong>Debug Info:</strong>
                 <div>Camera Permission: {cameraPermission}</div>
                 <div>Scanner Active: {isScanning ? 'Yes' : 'No'}</div>
+                <div>Scan Lock: {isScanningRef.current ? 'Locked' : 'Unlocked'}</div>
                 <div>Scanner Instance: {html5QrCodeRef.current ? 'Created' : 'Not Created'}</div>
                 <div>QR Reader Element: {document.getElementById('qr-reader') ? 'Found' : 'Missing'}</div>
                 <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 
@@ -523,16 +559,12 @@ const QRScanner = () => {
                   Clear Result
                 </button>
                 <button 
-                  onClick={() => {
-                    setScanResult(null);
-                    if (!isScanning && cameraPermission === 'granted') {
-                      startScanner();
-                    }
-                  }}
+                  onClick={restartScanner}
                   className="btn btn-primary ml-2"
-                  disabled={isScanning || cameraPermission !== 'granted'}
+                  disabled={isScanning}
                 >
-                  Scan Another
+                  <Camera size={16} />
+                  Scan Next QR Code
                 </button>
               </div>
             </div>
