@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import { Camera, Upload, CheckCircle, XCircle, User, StopCircle, Play, Settings, AlertCircle } from 'lucide-react';
-import { Html5QrcodeScanner, Html5Qrcode, Html5QrcodeScanType } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 
 const QRScanner = () => {
   const [scanResult, setScanResult] = useState(null);
@@ -12,8 +12,8 @@ const QRScanner = () => {
   const [scannerError, setScannerError] = useState('');
   const [cameraPermission, setCameraPermission] = useState('unknown');
   
-  const scannerRef = useRef(null);
   const html5QrCodeRef = useRef(null);
+  const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
     checkCameraPermission();
@@ -53,29 +53,29 @@ const QRScanner = () => {
       setScannerError('');
       setIsScanning(true);
 
-      // Stop any existing scanner
-      if (html5QrCodeRef.current) {
-        try {
-          await html5QrCodeRef.current.clear();
-        } catch (e) {
-          console.log('No existing scanner to clear');
-        }
-      }
+      // Stop any existing scanner first
+      await stopScanner();
 
-      // Configuration for the scanner
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Configuration for the scanner with better settings
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
         disableFlip: false,
         videoConstraints: {
-          facingMode: "environment"
+          facingMode: { ideal: "environment" }, // Prefer back camera
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         },
-        rememberLastUsedCamera: true
+        rememberLastUsedCamera: true,
+        supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA]
       };
 
       // Success callback
-      const onScanSuccess = (decodedText, decodedResult) => {
+      const onScanSuccess = (decodedText) => {
         console.log('QR Code detected:', decodedText);
         
         // Stop the scanner immediately
@@ -87,21 +87,23 @@ const QRScanner = () => {
         toast.success('QR Code detected!');
       };
 
-      // Error callback (for debugging only)
+      // Error callback (for debugging only, don't show to user)
       const onScanFailure = (error) => {
-        // Don't show these errors as they happen frequently during scanning
+        // These errors happen frequently during scanning, so we don't show them
         console.debug('QR scan attempt:', error);
       };
 
-      // Create scanner
-      html5QrCodeRef.current = new Html5QrcodeScanner(
+      // Create and start scanner
+      scannerInstanceRef.current = new Html5QrcodeScanner(
         "qr-reader",
         config,
-        false
+        false // verbose logging
       );
 
       // Render the scanner
-      html5QrCodeRef.current.render(onScanSuccess, onScanFailure);
+      scannerInstanceRef.current.render(onScanSuccess, onScanFailure);
+
+      console.log('Scanner started successfully');
 
     } catch (error) {
       console.error('Scanner start error:', error);
@@ -111,20 +113,19 @@ const QRScanner = () => {
     }
   };
 
-  const stopScanner = () => {
-    if (html5QrCodeRef.current) {
-      try {
-        html5QrCodeRef.current.clear().then(() => {
-          console.log('Scanner cleared successfully');
-        }).catch(err => {
-          console.log('Scanner clear error:', err);
-        });
-        html5QrCodeRef.current = null;
-      } catch (error) {
-        console.error('Error stopping scanner:', error);
+  const stopScanner = async () => {
+    try {
+      if (scannerInstanceRef.current) {
+        console.log('Stopping scanner...');
+        await scannerInstanceRef.current.clear();
+        scannerInstanceRef.current = null;
+        console.log('Scanner stopped successfully');
       }
+    } catch (error) {
+      console.error('Error stopping scanner:', error);
+    } finally {
+      setIsScanning(false);
     }
-    setIsScanning(false);
   };
 
   const processQRCode = async (qrData, scanType = 'approval') => {
@@ -171,17 +172,27 @@ const QRScanner = () => {
     if (!file) return;
 
     try {
+      setLoading(true);
+      toast.loading('Scanning image...');
+      
+      // Create a temporary Html5Qrcode instance for file scanning
       const html5QrCode = new Html5Qrcode("file-upload-scanner");
       
       const qrCodeMessage = await html5QrCode.scanFile(file, true);
       console.log('QR Code from file:', qrCodeMessage);
       
       processQRCode(qrCodeMessage);
+      toast.dismiss();
       toast.success('QR Code found in image!');
       
     } catch (error) {
       console.error('File scan error:', error);
+      toast.dismiss();
       toast.error('No QR code found in the uploaded image');
+    } finally {
+      setLoading(false);
+      // Clear the file input
+      e.target.value = '';
     }
   };
 
@@ -311,21 +322,39 @@ const QRScanner = () => {
             <div id="file-upload-scanner" style={{ display: 'none' }}></div>
           </div>
 
-          {/* Browser Compatibility */}
+          {/* Browser Compatibility & Troubleshooting */}
           <div className="mt-4">
             <h4 className="mb-2">
               <Settings size={16} style={{ marginRight: '8px' }} />
-              Browser Requirements
+              Troubleshooting
             </h4>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              <p><strong>For best results:</strong></p>
-              <ul style={{ marginLeft: '16px' }}>
-                <li>Use Chrome, Firefox, or Safari</li>
-                <li>Ensure HTTPS connection (required for camera)</li>
+              <p><strong>Camera not working?</strong></p>
+              <ul style={{ marginLeft: '16px', marginBottom: '12px' }}>
+                <li>Ensure you're using HTTPS (required for camera access)</li>
                 <li>Allow camera permissions when prompted</li>
-                <li>Close other apps using the camera</li>
+                <li>Close other apps/tabs using the camera</li>
+                <li>Try refreshing the page</li>
+                <li>Use Chrome, Firefox, or Safari for best results</li>
+              </ul>
+              
+              <p><strong>Still having issues?</strong></p>
+              <ul style={{ marginLeft: '16px' }}>
+                <li>Try the file upload option above</li>
+                <li>Use manual input as a backup</li>
+                <li>Check browser console for detailed errors</li>
                 <li>Ensure good lighting conditions</li>
               </ul>
+              
+              <div className="mt-2 p-2" style={{ backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
+                <strong>Current Status:</strong>
+                <div>Camera Permission: {cameraPermission}</div>
+                <div>Scanner Active: {isScanning ? 'Yes' : 'No'}</div>
+                <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 
+                              navigator.userAgent.includes('Firefox') ? 'Firefox' : 
+                              navigator.userAgent.includes('Safari') ? 'Safari' : 'Other'}</div>
+                <div>HTTPS: {window.location.protocol === 'https:' ? 'Yes' : 'No'}</div>
+              </div>
             </div>
           </div>
         </div>

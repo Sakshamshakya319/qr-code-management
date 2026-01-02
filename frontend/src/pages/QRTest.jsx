@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { QrCode, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 
